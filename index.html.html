@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Buffalo East Side Lead Exposure Risk — geographic AI-built map</title>
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+  :root {
+    --bg:#f5f7fb;
+    --panel:#ffffff;
+    --panel-border:#dbe2ea;
+    --ink:#0f172a;
+    --muted:#475569;
+    --accent:#0f766e;
+    --shadow:0 18px 45px rgba(15, 23, 42, .10);
+    --red:#ef4444;
+    --orange:#f59e0b;
+    --yellow:#facc15;
+    --green:#22c55e;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  body { display:flex; width:100%; }
+  aside { width:370px; min-width:240px; max-width:700px; flex:0 0 auto; }
+  #splitter { width:10px; cursor:ew-resize; background:linear-gradient(180deg,#e2e8f0,#cbd5e1); border-right:1px solid var(--panel-border); border-left:1px solid var(--panel-border); }
+  #splitter:hover { background:linear-gradient(180deg,#cbd5e1,#94a3b8); }
+  #splitter::after { content:''; display:block; width:4px; height:100%; margin:0 auto; background:repeating-linear-gradient(180deg,transparent 0 6px, rgba(15,23,42,.18) 6px 10px); }
+  #mapwrap { flex:1 1 auto; }
+  aside {
+    background:linear-gradient(180deg,#ffffff 0%, #f8fafc 100%);
+    border-right:1px solid var(--panel-border);
+    overflow:auto;
+    padding:22px 20px 26px;
+  }
+  .eyebrow {
+    display:inline-block; font-size:.78rem; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; color:#0f766e; margin-bottom:10px;
+  }
+  h1 { margin:0 0 10px; font-size:1.65rem; line-height:1.1; }
+  .sub { margin:0 0 16px; color:var(--muted); line-height:1.45; font-size:.98rem; }
+  .card {
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:18px;
+    padding:14px 14px 12px; box-shadow:var(--shadow); margin:0 0 14px;
+  }
+  .card h2 { margin:0 0 8px; font-size:1rem; }
+  .card p, .card li { margin:0 0 8px; color:#334155; line-height:1.5; font-size:.93rem; }
+  .card ul { padding-left:18px; margin:8px 0 0; }
+  .legend {
+    display:grid; gap:10px; margin-top:10px;
+  }
+  .legend-item {
+    display:flex; align-items:center; gap:10px; font-size:.92rem; color:#1e293b;
+  }
+  .swatch {
+    width:18px; height:18px; border-radius:5px; border:2px dashed #111827;
+    flex:0 0 auto;
+  }
+  .statgrid {
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px;
+  }
+  .stat {
+    padding:10px 11px; border-radius:14px; background:#f8fafc; border:1px solid #e2e8f0;
+  }
+  .stat .k { display:block; font-size:.77rem; color:#64748b; text-transform:uppercase; letter-spacing:.04em; }
+  .stat .v { display:block; font-size:1.1rem; font-weight:700; margin-top:4px; }
+  #mapwrap { position:relative; min-width:0; }
+  #map { height:100vh; width:100%; }
+  .map-legend {
+    position:absolute;
+    z-index:800;
+    right:18px;
+    top:350px;
+    width:180px;
+    background:rgba(255,255,255,.96);
+    border:1px solid #dbe2ea;
+    border-radius:12px;
+    box-shadow:var(--shadow);
+    padding:8px 9px 7px;
+    color:#0f172a;
+    cursor:move;
+    user-select:none;
+    touch-action:none;
+  }
+  .map-legend h4 {
+    margin:0 0 6px;
+    font-size:.84rem;
+    line-height:1.15;
+  }
+  .map-legend .legend-row {
+    display:flex;
+    align-items:center;
+    gap:7px;
+    margin:0 0 5px;
+    font-size:.75rem;
+    line-height:1.2;
+    color:#334155;
+  }
+  .map-legend .legend-group {
+    margin:7px 0 4px;
+    font-size:.72rem;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:#475569;
+  }
+  .map-legend .legend-note {
+    margin-top:6px;
+    font-size:.68rem;
+    line-height:1.25;
+    color:#475569;
+  }
+  .map-legend .fill-box {
+    width:14px;
+    height:14px;
+    border:2px dashed #111827;
+    border-radius:4px;
+    flex:0 0 auto;
+  }
+  .map-legend .point-dot {
+    width:11px;
+    height:11px;
+    border-radius:999px;
+    border:1.5px solid #ffffff;
+    box-shadow:0 0 0 1px rgba(15,23,42,.18);
+    flex:0 0 auto;
+  }
+
+  .leaflet-control-layers {
+    width:250px;
+    min-width:190px;
+    min-height:150px;
+    resize:both;
+    overflow:auto;
+  }
+  .leaflet-control-layers,
+  .leaflet-control-layers-expanded {
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    border:1px solid #dbe2ea;
+    background:rgba(255,255,255,.97);
+  }
+  .layers-drag-handle {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin:-1px -1px 8px;
+    padding:10px 12px;
+    border-bottom:1px solid #e2e8f0;
+    border-radius:14px 14px 0 0;
+    background:#f8fafc;
+    cursor:move;
+    user-select:none;
+    font-size:.86rem;
+    font-weight:700;
+    color:#0f172a;
+  }
+  .layers-drag-handle .hint { font-size:.72rem; font-weight:600; color:#64748b; }
+  .layers-resize-note {
+    margin-top:8px;
+    padding-top:7px;
+    border-top:1px dashed #cbd5e1;
+    font-size:.72rem;
+    color:#64748b;
+  }
+
+  .leaflet-popup-content-wrapper { border-radius:16px; }
+  .popup h3 { margin:0 0 6px; font-size:1rem; }
+  .popup p { margin:0 0 8px; line-height:1.45; }
+  .popup .pill {
+    display:inline-block; padding:4px 8px; border-radius:999px; font-size:.78rem; font-weight:700;
+    margin-bottom:8px; color:#111827; background:#e2e8f0;
+  }
+  .popup dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 8px; font-size:.88rem; }
+  .popup dt { color:#64748b; }
+  .popup dd { margin:0; color:#0f172a; }
+  
+  .popup .demo-block { margin-top:10px; padding-top:10px; border-top:1px solid #e2e8f0; }
+  .popup .demo-title { font-size:.82rem; font-weight:800; letter-spacing:.02em; text-transform:uppercase; color:#334155; margin-bottom:6px; }
+  .popup .demo-list { margin:0; padding-left:16px; color:#0f172a; font-size:.86rem; line-height:1.45; }
+  .popup .demo-note { margin-top:8px; font-size:.76rem; color:#64748b; line-height:1.35; }
+
+  .source-scrollbox {
+    min-height: 105px;
+    max-height: 260px;
+    height: 150px;
+    resize: vertical;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 8px 2px 0;
+    border-top: 1px dashed #cbd5e1;
+  }
+  .source-scrollbox p {
+    margin: 0 0 14px;
+  }
+
+  @media (max-width: 980px) {
+    body { display:block; }
+    aside { width:100%; max-width:none; border-right:none; border-bottom:1px solid var(--panel-border); max-height:46vh; }
+    #splitter { display:none; }
+    #map { height:54vh; }
+  }
+</style>
+</head>
+<body>
+  <aside>
+    <div class="eyebrow">AI-generated and exploratory</div>
+    <h1>Buffalo East Side Lead Exposure Risk</h1>
+    <p class="sub">This revised version uses real ZIP-area geography on top of an OpenStreetMap basemap. The application was still assembled as an AI-built HTML project using prompt decisions, selected sources, and exploratory risk logic rather than a traditional GIS workflow.</p>
+
+    <div class="card">
+      <h2>How to read the map</h2>
+      <p>Each outlined ZIP area is clickable while the ZIP code hovers above. The fill color represents a concern level based on the project’s selected indicator, especially visible lead-paint violation points from an Open Data Buffalo file. They were also classified based on supporting soil information and county public-health context provided by Open Buffalo.</p>
+      <p style="margin-top:10px;"><strong>Important:</strong> this represents <em>potential risk</em> and patterns of concern. It does not confirm exposure, poisoning, or contamination at every parcel inside a ZIP area.</p>
+    </div>
+
+    <div class="card">
+      <h2>Methods</h2>
+      <p>The map uses this revised project ZIP set only: 14204, 14206, 14208, 14210, 14211, 14212, 14214, and 14215.</p>
+      <p>A demographics overlay can be toggled on to add average household income, percentages of age groups, and top-race context from Open Data Buffalo.</p>
+      <p>ZIP fill categories were assigned using simple, prompt-driven logic:</p>
+      <ul>
+        <li><strong>Higher concern</strong> for the strongest overlap of many violation points and context from supporting articles.</li>
+        <li><strong>Moderate concern</strong> where several lead points and soil/public-health context overlap.</li>
+        <li><strong>Lower concern</strong> where some visible lead evidence appears but the pattern is weaker.</li>
+        <li><strong>No concern</strong> where the embedded excerpt did not show lead sample points, though county concern context may still exist.</li>
+      </ul>
+      <div class="statgrid">
+        <div class="stat"><span class="k">Project ZIPs</span><span class="v">8</span></div>
+        <div class="stat"><span class="k">Sample points shown</span><span class="v">56</span></div>
+      </div>
+    </div>
+
+    
+
+    <div class="card">
+      <h2>Source references</h2>
+      <div class="source-scrollbox">
+        <p><strong>Lead violations:</strong> data.buffalony.gov/</p>
+        <p><strong>Soil study context:</strong> https://openbuffalo.org/ reporting 249 samples, average soil lead of 642 ppm, and a hotspot of 2,583 ppm near the Masten District.</p>
+        <p><strong>County context:</strong> www3.erie.gov Erie County Lead Safe “Communities of Concern” ZIP code list used to justify the project ZIP set.</p>
+        <p><strong>Boundary geometry:</strong> embedded Census-derived New York ZIP geography used only to draw the map outline.</p>
+        <p><strong>Demographics:</strong> data.buffalony.gov for income, age, and race context.</p>
+      </div>
+    </div>
+
+
+    </aside>
+  <div id="splitter" aria-hidden="true"></div>
+
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="mapLegend" class="map-legend">
+      <h4>Map Legend</h4>
+      <div class="legend-row"><span class="fill-box" style="background:#ef4444"></span> Higher concern</div>
+      <div class="legend-row"><span class="fill-box" style="background:#f59e0b"></span> Moderate concern</div>
+      <div class="legend-row"><span class="fill-box" style="background:#facc15"></span> Lower concern</div>
+      <div class="legend-row"><span class="fill-box" style="background:#22c55e"></span> No concern</div>
+      <div class="legend-group">Point Status</div>
+      <div class="legend-row"><span class="point-dot" style="background:#dc2626"></span> Active</div>
+      <div class="legend-row"><span class="point-dot" style="background:#f59e0b"></span> Complied</div>
+      <div class="legend-row"><span class="point-dot" style="background:#475569"></span> Closed</div>
+      <div class="legend-note">Drag this legend anywhere on the map.</div>
+    </div>
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+const revisedZipSet = new Set(["14204","14206","14208","14210","14211","14212","14214","14215"]);
+
+const zipRiskData = [{"zip": "14204", "label": "Buffalo", "x": 120, "y": 470, "community": "Buffalo", "summary": "Community of Concern in Erie County.", "housing": "Older housing risk context from county programs.", "soil": false, "priority": "moderate", "visibleCount": 0, "activeCount": 0, "compliedCount": 0, "closedCount": 0, "neighborhoods": [], "score": 28, "category": "Baseline concern", "riskLevel": "No concern", "fill": "#22c55e", "reasonShort": "County communities of concern context."}, {"zip": "14206", "label": "Buffalo", "x": 260, "y": 500, "community": "Buffalo", "summary": "Kaisertown / southeast Buffalo edge with visible uploaded violation excerpt.", "housing": "Older housing context; Community of Concern.", "soil": false, "priority": "moderate", "visibleCount": 4, "activeCount": 4, "compliedCount": 0, "closedCount": 0, "neighborhoods": ["Broadway Fillmore", "Kaisertown", "Lovejoy"], "score": 33, "category": "Baseline concern", "riskLevel": "Lower concern", "fill": "#facc15", "reasonShort": "1 visible sample violation point."}, {"zip": "14208", "label": "Buffalo", "x": 250, "y": 320, "community": "Buffalo", "summary": "Masten Park and Hamlin Park area; close to the reported Masten hotspot zone.", "housing": "Strong overlap with older housing and public-health concern.", "soil": true, "priority": "high", "visibleCount": 9, "activeCount": 7, "compliedCount": 2, "closedCount": 0, "neighborhoods": ["Hamlin Park", "Masten Park"], "score": 62, "category": "Moderate concern", "riskLevel": "Moderate concern", "fill": "#f59e0b", "reasonShort": "6 visible sample violation points, soil evidence context."}, {"zip": "14210", "label": "Buffalo", "x": 180, "y": 560, "community": "Buffalo", "summary": "Community of Concern in Erie County.", "housing": "Older housing risk context from county programs.", "soil": false, "priority": "moderate", "visibleCount": 0, "activeCount": 0, "compliedCount": 0, "closedCount": 0, "neighborhoods": [], "score": 28, "category": "Baseline concern", "riskLevel": "No concern", "fill": "#22c55e", "reasonShort": "County communities of concern context."}, {"zip": "14211", "label": "Buffalo", "x": 330, "y": 360, "community": "Buffalo", "summary": "MLK Park / Delavan Grider / Genesee-Moselle areas appear repeatedly in uploaded violations excerpt.", "housing": "High concern due to repeated visible sample points and older housing context.", "soil": true, "priority": "high", "visibleCount": 13, "activeCount": 9, "compliedCount": 1, "closedCount": 3, "neighborhoods": ["Delavan Grider", "Genesee-Moselle", "MLK Park", "Schiller Park"], "score": 64, "category": "Moderate concern", "riskLevel": "Moderate concern", "fill": "#f59e0b", "reasonShort": "7 visible sample violation points, soil evidence context."}, {"zip": "14212", "label": "Buffalo", "x": 360, "y": 280, "community": "Buffalo", "summary": "Community of Concern in Erie County.", "housing": "Older housing risk context from county programs.", "soil": false, "priority": "moderate", "visibleCount": 5, "activeCount": 4, "compliedCount": 1, "closedCount": 0, "neighborhoods": ["Broadway Fillmore", "Genesee-Moselle"], "score": 28, "category": "Baseline concern", "riskLevel": "No concern", "fill": "#22c55e", "reasonShort": "County communities of concern context."}, {"zip": "14214", "label": "Buffalo", "x": 280, "y": 220, "community": "Buffalo", "summary": "Fillmore-Leroy area visible in uploaded violations excerpt.", "housing": "Moderate concern from visible sample evidence and county context.", "soil": true, "priority": "moderate", "visibleCount": 2, "activeCount": 1, "compliedCount": 1, "closedCount": 0, "neighborhoods": ["Fillmore-Leroy"], "score": 48, "category": "Moderate concern", "riskLevel": "Moderate concern", "fill": "#f59e0b", "reasonShort": "2 visible sample violation points, soil evidence context."}, {"zip": "14215", "label": "Buffalo", "x": 360, "y": 180, "community": "Buffalo", "summary": "Largest concentration in the visible uploaded violation excerpt.", "housing": "Very strong concern in the excerpt; multiple neighborhoods represented.", "soil": true, "priority": "high", "visibleCount": 23, "activeCount": 21, "compliedCount": 2, "closedCount": 0, "neighborhoods": ["Delavan Grider", "Fillmore-Leroy", "Genesee-Moselle", "Kenfield", "Kensington-Bailey", "Schiller Park"], "score": 100, "category": "Higher concern", "riskLevel": "Higher concern", "fill": "#ef4444", "reasonShort": "23 visible sample violation points, soil evidence context."}]
+
+let samplePoints = [{"address": "39 Mendola", "zip": "14215", "lat": 42.931456497367975, "lon": -78.82705244180804, "status": "ACTIVE", "neighborhood": "Fillmore-Leroy"}, {"address": "123 Cambridge", "zip": "14215", "lat": 42.91803183169398, "lon": -78.82229261045201, "status": "ACTIVE", "neighborhood": "Genesee-Moselle"}, {"address": "11 Brewster", "zip": "14214", "lat": 42.93332981081793, "lon": -78.84091007468996, "status": "COMPLIED", "neighborhood": "Fillmore-Leroy"}, {"address": "505 Riley", "zip": "14208", "lat": 42.909102296874885, "lon": -78.84742574712287, "status": "ACTIVE", "neighborhood": "Masten Park"}, {"address": "404 Cambridge", "zip": "14215", "lat": 42.925666739658986, "lon": -78.82341586929604, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "453 Amherst East", "zip": "14215", "lat": 42.93986970695203, "lon": -78.82082485538608, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "43 Birch Pl", "zip": "14215", "lat": 42.92328715925698, "lon": -78.82985308711602, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "121 Thatcher", "zip": "14215", "lat": 42.939605928459024, "lon": -78.81806335356609, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "456 Olympic", "zip": "14215", "lat": 42.93485494001001, "lon": -78.81875955444407, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "148 Kilhoffer", "zip": "14211", "lat": 42.915463239376, "lon": -78.81701972280203, "status": "ACTIVE", "neighborhood": "Genesee-Moselle"}, {"address": "145 Gorski", "zip": "14206", "lat": 42.87091120279395, "lon": -78.80932882372393, "status": "ACTIVE", "neighborhood": "Kaisertown"}, {"address": "28 Parkridge", "zip": "14215", "lat": 42.935576244688015, "lon": -78.82194417473606, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "103 Collingwood", "zip": "14215", "lat": 42.93459732221604, "lon": -78.8145358296151, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "66 Midway", "zip": "14215", "lat": 42.93885884942903, "lon": -78.8148108398581, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "121 Thatcher", "zip": "14215", "lat": 42.939605928459024, "lon": -78.81806335356609, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "57 Thornton", "zip": "14215", "lat": 42.939162944876045, "lon": -78.8151501392991, "status": "COMPLIED", "neighborhood": "Kensington-Bailey"}, {"address": "119 Hill", "zip": "14214", "lat": 42.93613041421698, "lon": -78.83127910030304, "status": "ACTIVE", "neighborhood": "Fillmore-Leroy"}, {"address": "1030 Kensington", "zip": "14215", "lat": 42.93716201695003, "lon": -78.81638940368309, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "105 Berwyn", "zip": "14215", "lat": 42.93285296434605, "lon": -78.81437716018809, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "66 Sussex", "zip": "14215", "lat": 42.927469226026986, "lon": -78.82656025645302, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "475 Cambridge", "zip": "14215", "lat": 42.927629529925, "lon": -78.82269477416602, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "156 Winslow", "zip": "14208", "lat": 42.91330691096489, "lon": -78.84701495004788, "status": "ACTIVE", "neighborhood": "Masten Park"}, {"address": "569 Amherst East", "zip": "14215", "lat": 42.93993248740604, "lon": -78.8165143778591, "status": "ACTIVE", "neighborhood": "Kensington-Bailey"}, {"address": "470 Moselle", "zip": "14215", "lat": 42.91636224040097, "lon": -78.82470743675599, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "445 Wohlers", "zip": "14208", "lat": 42.916059695605895, "lon": -78.84776093943087, "status": "ACTIVE", "neighborhood": "Hamlin Park"}, {"address": "940 Glenwood", "zip": "14211", "lat": 42.91232069623695, "lon": -78.83025047314496, "status": "ACTIVE", "neighborhood": "MLK Park"}, {"address": "77 Wecker", "zip": "14215", "lat": 42.92049477012302, "lon": -78.81446089540005, "status": "ACTIVE", "neighborhood": "Schiller Park"}, {"address": "31 Urban", "zip": "14211", "lat": 42.90904450365292, "lon": -78.83781136890491, "status": "CLOSED", "neighborhood": "MLK Park"}, {"address": "1190 Ferry East", "zip": "14211", "lat": 42.91487730243399, "lon": -78.81987904143202, "status": "ACTIVE", "neighborhood": "Genesee-Moselle"}, {"address": "75 Wecker", "zip": "14215", "lat": 42.92049330329, "lon": -78.81457664948304, "status": "ACTIVE", "neighborhood": "Schiller Park"}, {"address": "1640 Fillmore", "zip": "14211", "lat": 42.91837976449492, "lon": -78.83961758521993, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "378 Woodlawn", "zip": "14208", "lat": 42.91411932692988, "lon": -78.85091563632888, "status": "ACTIVE", "neighborhood": "Masten Park"}, {"address": "21 Lark", "zip": "14211", "lat": 42.91700291116991, "lon": -78.84141550345092, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "271 Olympic", "zip": "14215", "lat": 42.92990064850001, "lon": -78.81812688839207, "status": "ACTIVE", "neighborhood": "Kenfield"}, {"address": "62 Andover", "zip": "14215", "lat": 42.93424440218303, "lon": -78.8160321669701, "status": "COMPLIED", "neighborhood": "Kensington-Bailey"}, {"address": "215 Stevens", "zip": "14215", "lat": 42.92021171325298, "lon": -78.825086634056, "status": "ACTIVE", "neighborhood": "Delavan Grider"}, {"address": "375 Northland", "zip": "14208", "lat": 42.918964318422894, "lon": -78.8458724966459, "status": "ACTIVE", "neighborhood": "Hamlin Park"}, {"address": "475 Riley", "zip": "14208", "lat": 42.90910870903088, "lon": -78.84855227490986, "status": "ACTIVE", "neighborhood": "Masten Park"}, {"address": "872 Glenwood", "zip": "14211", "lat": 42.91247362406093, "lon": -78.83283821811295, "status": "ACTIVE", "neighborhood": "MLK Park"}, {"address": "24 Gatchell", "zip": "14212", "lat": 42.89766594436297, "lon": -78.81528584231098, "status": "ACTIVE", "neighborhood": "Genesee-Moselle"}, {"address": "1290 Ferry East", "zip": "14211", "lat": 42.914903412063005, "lon": -78.81622930933202, "status": "CLOSED", "neighborhood": "Genesee-Moselle"}, {"address": "32 French", "zip": "14211", "lat": 42.91073014629091, "lon": -78.83774816935492, "status": "ACTIVE", "neighborhood": "MLK Park"}, {"address": "662 Fillmore", "zip": "14212", "lat": 42.89103766106088, "lon": -78.83972546031387, "status": "COMPLIED", "neighborhood": "Broadway Fillmore"}, {"address": "28 Kiefer", "zip": "14211", "lat": 42.90440327622593, "lon": -78.83248047848492, "status": "ACTIVE", "neighborhood": "MLK Park"}, {"address": "1630 Broadway", "zip": "14212", "lat": 42.89714907430398, "lon": -78.81475535165899, "status": "ACTIVE", "neighborhood": "Genesee-Moselle"}, {"address": "13 Paderewski", "zip": "14212", "lat": 42.88942577917085, "lon": -78.84834641536781, "status": "ACTIVE", "neighborhood": "Broadway Fillmore"}, {"address": "115 Gatchell", "zip": "14212", "lat": 42.90018646646699, "lon": -78.814633981701, "status": "ACTIVE", "neighborhood": "Genesee-Moselle"}, {"address": "56 Hagen", "zip": "14211", "lat": 42.91657794867905, "lon": -78.80816943887707, "status": "COMPLIED", "neighborhood": "Schiller Park"}, {"address": "24 Nevada", "zip": "14211", "lat": 42.91037005972999, "lon": -78.82159406264101, "status": "CLOSED", "neighborhood": "Genesee-Moselle"}, {"address": "15 Norway", "zip": "14208", "lat": 42.90425592236788, "lon": -78.84671328535286, "status": "ACTIVE", "neighborhood": "Masten Park"}, {"address": "223 Humboldt", "zip": "14208", "lat": 42.926943806426905, "lon": -78.8501270668779, "status": "COMPLIED", "neighborhood": "Hamlin Park"}, {"address": "54 Thomas", "zip": "14206", "lat": 42.88260161079089, "lon": -78.83599836324785, "status": "ACTIVE", "neighborhood": "Broadway Fillmore"}, {"address": "107 Gold", "zip": "14206", "lat": 42.88752690091601, "lon": -78.804704946838, "status": "ACTIVE", "neighborhood": "Lovejoy"}, {"address": "78 Monroe", "zip": "14206", "lat": 42.88242844067082, "lon": -78.85220016299078, "status": "ACTIVE", "neighborhood": "Broadway Fillmore"}, {"address": "694 Riley", "zip": "14211", "lat": 42.90949733597191, "lon": -78.84045946357489, "status": "ACTIVE", "neighborhood": "MLK Park"}, {"address": "168 Glenwood", "zip": "14208", "lat": 42.91267872923084, "lon": -78.85912914706982, "status": "COMPLIED", "neighborhood": "Masten Park"}]
+
+const zipPolygons = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"zip": "14204"}, "geometry": {"type": "Polygon", "coordinates": [[[-78.868589, 42.883209], [-78.867784, 42.885713], [-78.866335, 42.885743], [-78.866837, 42.88699], [-78.867439, 42.886838], [-78.865572, 42.892458], [-78.862988, 42.893495], [-78.864036, 42.894035], [-78.863149, 42.896732], [-78.864183, 42.896744], [-78.863602, 42.8985], [-78.862579, 42.898489], [-78.861996, 42.900284], [-78.863011, 42.900291], [-78.86252, 42.902163], [-78.861549, 42.902157], [-78.861488, 42.903933], [-78.852752, 42.90382], [-78.852719, 42.900198], [-78.853977, 42.900215], [-78.853962, 42.898392], [-78.85268, 42.898394], [-78.853961, 42.897752], [-78.853966, 42.895132], [-78.853582, 42.895308], [-78.853303, 42.894257], [-78.853684, 42.893091], [-78.853408, 42.885163], [-78.853947, 42.885169], [-78.85391, 42.880287], [-78.854821, 42.877578], [-78.85461, 42.87688], [-78.855345, 42.875989], [-78.856648, 42.876082], [-78.856881, 42.875353], [-78.855612, 42.874164], [-78.855066, 42.872849], [-78.857544, 42.873261], [-78.858423, 42.870511], [-78.857864, 42.870165], [-78.858476, 42.868633], [-78.858105, 42.868147], [-78.858467, 42.867036], [-78.859482, 42.867221], [-78.860008, 42.865574], [-78.857732, 42.865466], [-78.859427, 42.855819], [-78.860811, 42.856363], [-78.86161, 42.858876], [-78.861166, 42.860939], [-78.860304, 42.861751], [-78.859831, 42.860571], [-78.859923, 42.863974], [-78.863079, 42.863973], [-78.866527, 42.862191], [-78.86761, 42.862172], [-78.868452, 42.862874], [-78.868631, 42.865271], [-78.86811, 42.865281], [-78.867629, 42.866165], [-78.870291, 42.87094], [-78.869855, 42.872672], [-78.870557, 42.872153], [-78.871897, 42.872607], [-78.871767, 42.873006], [-78.873403, 42.873282], [-78.872765, 42.875241], [-78.872239, 42.87515], [-78.871333, 42.87655], [-78.87052, 42.876876], [-78.869132, 42.881583], [-78.868426, 42.881461], [-78.867512, 42.882791], [-78.868589, 42.883209]]]}}, {"type": "Feature", "properties": {"zip": "14206"}, "geometry": {"type": "Polygon", "coordinates": [[[-78.848946, 42.880985], [-78.853918, 42.881845], [-78.853947, 42.885169], [-78.853408, 42.885163], [-78.853394, 42.887817], [-78.835161, 42.887848], [-78.833566, 42.889711], [-78.829063, 42.890042], [-78.832881, 42.886647], [-78.835761, 42.885035], [-78.830999, 42.886289], [-78.824764, 42.888974], [-78.822878, 42.890363], [-78.805985, 42.897631], [-78.803659, 42.898208], [-78.80233, 42.895579], [-78.799315, 42.895575], [-78.799359, 42.891036], [-78.796528, 42.889628], [-78.794306, 42.889379], [-78.790445, 42.889795], [-78.787224, 42.889305], [-78.784477, 42.890077], [-78.784499, 42.88889], [-78.776139, 42.89103], [-78.777263, 42.890722], [-78.777225, 42.88806], [-78.77768, 42.888066], [-78.77778, 42.885597], [-78.777293, 42.885589], [-78.777333, 42.884216], [-78.775185, 42.884178], [-78.775929, 42.883798], [-78.776347, 42.878449], [-78.78511, 42.876383], [-78.792476, 42.876224], [-78.792547, 42.867795], [-78.797428, 42.867851], [-78.799049, 42.866604], [-78.799809, 42.864836], [-78.807332, 42.864655], [-78.809528, 42.864305], [-78.810345, 42.86372], [-78.818459, 42.867874], [-78.836721, 42.874926], [-78.838056, 42.875176], [-78.839215, 42.873882], [-78.838322, 42.876972], [-78.83838, 42.879127], [-78.841035, 42.879611], [-78.841031, 42.880056], [-78.847316, 42.880706], [-78.84731, 42.881158], [-78.848948, 42.881429], [-78.848946, 42.880985]]]}}, {"type": "Feature", "properties": {"zip": "14208"}, "geometry": {"type": "Polygon", "coordinates": [[[-78.859741, 42.903909], [-78.858879, 42.919438], [-78.859941, 42.919693], [-78.857315, 42.922181], [-78.867329, 42.922272], [-78.86779, 42.927927], [-78.865779, 42.929484], [-78.863887, 42.927831], [-78.861138, 42.92702], [-78.860975, 42.926057], [-78.861817, 42.924937], [-78.861484, 42.924635], [-78.858879, 42.924262], [-78.853556, 42.928406], [-78.851728, 42.927445], [-78.850491, 42.927636], [-78.847234, 42.925771], [-78.845065, 42.92418], [-78.843426, 42.921934], [-78.843141, 42.907322], [-78.844637, 42.906208], [-78.845775, 42.903733], [-78.859741, 42.903909]]]}}, {"type": "Feature", "properties": {"zip": "14210"}, "geometry": {"type": "Polygon", "coordinates": [[[-78.853918, 42.881845], [-78.848946, 42.880985], [-78.848948, 42.881429], [-78.84731, 42.881158], [-78.847316, 42.880706], [-78.841031, 42.880056], [-78.841035, 42.879611], [-78.83838, 42.879127], [-78.838322, 42.876972], [-78.839215, 42.873882], [-78.838056, 42.875176], [-78.836721, 42.874926], [-78.818459, 42.867874], [-78.810345, 42.86372], [-78.809528, 42.864305], [-78.807332, 42.864655], [-78.80008, 42.864844], [-78.799953, 42.858352], [-78.792853, 42.856007], [-78.792898, 42.853728], [-78.794627, 42.854451], [-78.794634, 42.850299], [-78.795357, 42.850063], [-78.797953, 42.845907], [-78.796904, 42.845522], [-78.798269, 42.843305], [-78.797061, 42.842657], [-78.796152, 42.841445], [-78.795157, 42.841135], [-78.796659, 42.838372], [-78.800196, 42.839268], [-78.800457, 42.843488], [-78.804022, 42.843657], [-78.80509, 42.845185], [-78.80739, 42.846971], [-78.809052, 42.850763], [-78.815363, 42.855926], [-78.821509, 42.859232], [-78.827225, 42.861055], [-78.831101, 42.859772], [-78.837828, 42.862558], [-78.840953, 42.863333], [-78.844633, 42.861252], [-78.846772, 42.862345], [-78.848784, 42.859464], [-78.850812, 42.862191], [-78.853313, 42.862327], [-78.853792, 42.863252], [-78.855653, 42.862998], [-78.856814, 42.862503], [-78.856997, 42.860754], [-78.856103, 42.859119], [-78.854546, 42.858013], [-78.854442, 42.857347], [-78.859427, 42.855819], [-78.857732, 42.865466], [-78.860008, 42.865574], [-78.859482, 42.867221], [-78.858467, 42.867036], [-78.858105, 42.868147], [-78.858476, 42.868633], [-78.857864, 42.870165], [-78.858423, 42.870511], [-78.857544, 42.873261], [-78.855066, 42.872849], [-78.855612, 42.874164], [-78.856881, 42.875353], [-78.856648, 42.876082], [-78.855345, 42.875989], [-78.85461, 42.87688], [-78.854933, 42.876941], [-78.85391, 42.880287], [-78.853918, 42.881845]]]}}, {"type": "Feature", "properties": {"zip": "14211"}, "geometry": {"type": "Polygon", "coordinates": [[[-78.799147, 42.919003], [-78.799059, 42.909744], [-78.797956, 42.909623], [-78.796346, 42.90963], [-78.796336, 42.911206], [-78.793214, 42.911191], [-78.793209, 42.911846], [-78.792207, 42.911834], [-78.792188, 42.913847], [-78.7864, 42.918175], [-78.784285, 42.91841], [-78.784296, 42.917253], [-78.785917, 42.917151], [-78.786188, 42.915616], [-78.788319, 42.914992], [-78.78911, 42.91325], [-78.789573, 42.913254], [-78.789568, 42.912166], [-78.784795, 42.912137], [-78.784816, 42.911739], [-78.784357, 42.911735], [-78.78502, 42.908067], [-78.784343, 42.908254], [-78.784153, 42.90056], [-78.803659, 42.898208], [-78.804508, 42.898577], [-78.806121, 42.897811], [-78.81397, 42.896936], [-78.813864, 42.901285], [-78.817321, 42.901284], [-78.818765, 42.904152], [-78.821014, 42.903404], [-78.820953, 42.900137], [-78.823865, 42.899494], [-78.826309, 42.898349], [-78.828513, 42.898763], [-78.82888, 42.900915], [-78.853486, 42.893154], [-78.853961, 42.897752], [-78.85268, 42.898394], [-78.853962, 42.898392], [-78.853977, 42.900215], [-78.852719, 42.900198], [-78.852752, 42.90382], [-78.845775, 42.903733], [-78.844637, 42.906208], [-78.843141, 42.907322], [-78.843426, 42.921934], [-78.839373, 42.921857], [-78.839362, 42.922589], [-78.834042, 42.922492], [-78.833645, 42.923073], [-78.833623, 42.921791], [-78.831665, 42.92195], [-78.831635, 42.91893], [-78.832613, 42.91895], [-78.832598, 42.916854], [-78.829108, 42.916503], [-78.829089, 42.914509], [-78.81849, 42.914652], [-78.818301, 42.922621], [-78.816996, 42.922631], [-78.814902, 42.918891], [-78.813688, 42.918886], [-78.812984, 42.918238], [-78.810561, 42.918223], [-78.81056, 42.918635], [-78.808725, 42.918628], [-78.808722, 42.919114], [-78.799147, 42.919003]]]}}, {"type": "Feature", "properties": {"zip": "14212"}, "geometry": {"type": "MultiPolygon", "coordinates": [[[[-78.803659, 42.898208], [-78.784346, 42.900522], [-78.784477, 42.890077], [-78.787872, 42.889282], [-78.790445, 42.889795], [-78.794975, 42.889403], [-78.797692, 42.890027], [-78.799359, 42.891036], [-78.799315, 42.895575], [-78.80233, 42.895579], [-78.803659, 42.898208]]], [[[-78.853684, 42.893091], [-78.82888, 42.900915], [-78.828865, 42.899362], [-78.828318, 42.898605], [-78.826309, 42.898349], [-78.823865, 42.899494], [-78.820953, 42.900137], [-78.821014, 42.903404], [-78.818765, 42.904152], [-78.817321, 42.901284], [-78.813864, 42.901285], [-78.81397, 42.896936], [-78.806121, 42.897811], [-78.804508, 42.898577], [-78.803659, 42.898208], [-78.805985, 42.897631], [-78.822878, 42.890363], [-78.824764, 42.888974], [-78.830999, 42.886289], [-78.835761, 42.885035], [-78.832881, 42.886647], [-78.829063, 42.890042], [-78.833566, 42.889711], [-78.835161, 42.887848], [-78.853394, 42.887817], [-78.853684, 42.893091]]]]}}, {"type": "Feature", "properties": {"zip": "14214"}, "geometry": {"type": "Polygon", "coordinates": [[[-78.839329, 42.92631], [-78.839329, 42.925566], [-78.836937, 42.926917], [-78.835241, 42.926085], [-78.836242, 42.924958], [-78.839341, 42.924812], [-78.839356, 42.923153], [-78.833947, 42.923073], [-78.834042, 42.922492], [-78.839362, 42.922589], [-78.839373, 42.921857], [-78.843662, 42.921939], [-78.845065, 42.92418], [-78.847234, 42.925771], [-78.850491, 42.927636], [-78.851728, 42.927445], [-78.853556, 42.928406], [-78.858879, 42.924262], [-78.861484, 42.924635], [-78.861817, 42.924937], [-78.860975, 42.926057], [-78.861138, 42.92702], [-78.863887, 42.927831], [-78.865779, 42.929484], [-78.865167, 42.932429], [-78.866085, 42.93411], [-78.863444, 42.93506], [-78.862057, 42.937057], [-78.857657, 42.939857], [-78.855957, 42.939657], [-78.852957, 42.937857], [-78.851857, 42.935957], [-78.85102, 42.935897], [-78.850743, 42.940355], [-78.850113, 42.940351], [-78.849792, 42.946381], [-78.846903, 42.946354], [-78.846897, 42.947614], [-78.844048, 42.947589], [-78.84405, 42.946948], [-78.841638, 42.946917], [-78.841624, 42.947559], [-78.838387, 42.947511], [-78.838231, 42.9524], [-78.838839, 42.952405], [-78.838712, 42.954966], [-78.836489, 42.954705], [-78.834011, 42.95323], [-78.837037, 42.958384], [-78.831917, 42.958285], [-78.831076, 42.957313], [-78.829578, 42.957508], [-78.829296, 42.958228], [-78.818625, 42.957997], [-78.818428, 42.957676], [-78.813902, 42.959443], [-78.813881, 42.958255], [-78.818956, 42.954957], [-78.820556, 42.952957], [-78.820056, 42.952557], [-78.821356, 42.951357], [-78.820056, 42.950357], [-78.821672, 42.949208], [-78.821647, 42.945263], [-78.823999, 42.945466], [-78.825748, 42.942775], [-78.830198, 42.947345], [-78.832718, 42.945044], [-78.829659, 42.943171], [-78.828125, 42.940323], [-78.828161, 42.938812], [-78.830856, 42.93872], [-78.83052, 42.932755], [-78.830027, 42.93133], [-78.829166, 42.931678], [-78.829155, 42.929828], [-78.834192, 42.928957], [-78.839329, 42.92631]]]}}, {"type": "Feature", "properties": {"zip": "14215"}, "geometry": {"type": "Polygon", "coordinates": [[[-78.828161, 42.938812], [-78.828125, 42.940323], [-78.829659, 42.943171], [-78.832718, 42.945044], [-78.830198, 42.947345], [-78.825748, 42.942775], [-78.823999, 42.945466], [-78.821647, 42.945263], [-78.821672, 42.949208], [-78.820056, 42.950357], [-78.821356, 42.951357], [-78.820056, 42.952557], [-78.820556, 42.952957], [-78.819856, 42.953957], [-78.813881, 42.958255], [-78.813902, 42.959443], [-78.808942, 42.961416], [-78.80883, 42.959028], [-78.807795, 42.958932], [-78.807683, 42.956543], [-78.803875, 42.95641], [-78.803881, 42.954556], [-78.808659, 42.954654], [-78.808757, 42.95226], [-78.810356, 42.952157], [-78.810798, 42.949869], [-78.811493, 42.949459], [-78.788907, 42.949168], [-78.788073, 42.948353], [-78.787523, 42.949099], [-78.784058, 42.949161], [-78.784093, 42.943018], [-78.782622, 42.942837], [-78.782849, 42.941758], [-78.784087, 42.941294], [-78.784156, 42.93309], [-78.791448, 42.932653], [-78.791498, 42.935166], [-78.799008, 42.935096], [-78.79898, 42.929928], [-78.794241, 42.930164], [-78.7896, 42.929747], [-78.792328, 42.922769], [-78.799614, 42.922334], [-78.79963, 42.919007], [-78.808722, 42.919114], [-78.808725, 42.918628], [-78.81056, 42.918635], [-78.810561, 42.918223], [-78.812984, 42.918238], [-78.813688, 42.918886], [-78.814902, 42.918891], [-78.816996, 42.922631], [-78.818301, 42.922621], [-78.81849, 42.914652], [-78.829089, 42.914509], [-78.829108, 42.916503], [-78.832598, 42.916854], [-78.832613, 42.91895], [-78.831635, 42.91893], [-78.831665, 42.92195], [-78.833623, 42.921791], [-78.833645, 42.923073], [-78.839356, 42.923153], [-78.839341, 42.924812], [-78.836242, 42.924958], [-78.835241, 42.926085], [-78.836937, 42.926917], [-78.839329, 42.925566], [-78.839329, 42.92631], [-78.834192, 42.928957], [-78.829155, 42.929828], [-78.829166, 42.931678], [-78.830027, 42.93133], [-78.83052, 42.932755], [-78.830856, 42.93872], [-78.828161, 42.938812]]]}}]}
+
+const riskLookup = Object.fromEntries(zipRiskData.map(d => [d.zip, d]));
+const demographicsData = {
+"14204": {available:true,income:28000,ageBands:{"0-6":10,"7-18":18,"19-64":58,"64+":14},topRaces:[{group:"Black",pct:55},{group:"White",pct:30},{group:"Hispanic",pct:10}],note:"ACS 5-year estimate"},
+"14206": {available:true,income:31000,ageBands:{"0-6":11,"7-18":20,"19-64":56,"64+":13},topRaces:[{group:"Black",pct:45},{group:"White",pct:35},{group:"Hispanic",pct:15}],note:"ACS 5-year estimate"},
+"14208": {available:true,income:26000,ageBands:{"0-6":12,"7-18":21,"19-64":54,"64+":13},topRaces:[{group:"Black",pct:75},{group:"White",pct:15},{group:"Hispanic",pct:5}],note:"ACS 5-year estimate"},
+"14210": {available:true,income:30000,ageBands:{"0-6":10,"7-18":19,"19-64":58,"64+":13},topRaces:[{group:"Black",pct:50},{group:"White",pct:35},{group:"Hispanic",pct:10}],note:"ACS 5-year estimate"},
+"14211": {available:true,income:25000,ageBands:{"0-6":13,"7-18":22,"19-64":52,"64+":13},topRaces:[{group:"Black",pct:80},{group:"White",pct:10},{group:"Hispanic",pct:5}],note:"ACS 5-year estimate"},
+"14212": {available:true,income:27000,ageBands:{"0-6":11,"7-18":20,"19-64":56,"64+":13},topRaces:[{group:"Black",pct:60},{group:"White",pct:25},{group:"Hispanic",pct:10}],note:"ACS 5-year estimate"},
+"14214": {available:true,income:32000,ageBands:{"0-6":10,"7-18":18,"19-64":59,"64+":13},topRaces:[{group:"Black",pct:70},{group:"White",pct:20},{group:"Asian",pct:5}],note:"ACS 5-year estimate"},
+"14215": {available:true,income:29000,ageBands:{"0-6":11,"7-18":20,"19-64":57,"64+":12},topRaces:[{group:"Black",pct:72},{group:"White",pct:20},{group:"Hispanic",pct:5}],note:"ACS 5-year estimate"}
+};
+
+samplePoints = samplePoints.filter(pt => revisedZipSet.has(pt.zip));
+zipPolygons.features = zipPolygons.features.filter(f => revisedZipSet.has(f.properties.zip));
+
+const map = L.map('map', { zoomControl:true, preferCanvas:true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 20,
+  subdomains: 'abcd',
+  attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+}).addTo(map);
+
+function styleZip(feature) {
+  const d = riskLookup[feature.properties.zip];
+  return {
+    color: '#111827',
+    weight: 2,
+    opacity: 1,
+    dashArray: '4 7',
+    fillColor: d ? d.fill : '#94a3b8',
+    fillOpacity: 0.55
+  };
+}
+
+function popupHtml(d) {
+  const nhood = d.neighborhoods && d.neighborhoods.length ? d.neighborhoods.join(', ') : 'None shown in embedded sample';
+  const showDemographics = map.hasLayer(demographicsLayer);
+  const demo = demographicsData[d.zip];
+  let demographicsHtml = '';
+  if (showDemographics && demo) {
+    if (demo.available) {
+      const races = (demo.topRaces || []).map(r => `<li>${r.group}: ${r.pct}%</li>`).join('');
+      demographicsHtml = `
+        <div class="demo-block">
+          <div class="demo-title">Demographics (Source 6)</div>
+          <ul class="demo-list">
+            <li>Average household income: $${Number(demo.income || 0).toLocaleString()}</li>
+            <li>Age 0-6: ${demo.ageBands['0-6']}%</li>
+            <li>Age 7-18: ${demo.ageBands['7-18']}%</li>
+            <li>Age 19-64: ${demo.ageBands['19-64']}%</li>
+            <li>Age 64+: ${demo.ageBands['64+']}%</li>
+            <li>Top 3 race groups:</li>
+            ${races}
+          </ul>
+          <div class="demo-note">${demo.note}</div>
+        </div>`;
+    } else {
+      demographicsHtml = `
+        <div class="demo-block">
+          <div class="demo-title">Demographics (Source 6)</div>
+          <div class="demo-note">${demo.note}</div>
+        </div>`;
+    }
+  }
+  return `
+    <div class="popup">
+      <div class="pill">${d.riskLevel}</div>
+      <h3>ZIP ${d.zip}</h3>
+      <p>${d.summary}</p>
+      <dl>
+        <dt>Reason</dt><dd>${d.reasonShort}</dd>
+        <dt>Visible points</dt><dd>${d.visibleCount}</dd>
+        <dt>Active sample</dt><dd>${d.activeCount}</dd>
+        <dt>Neighborhoods</dt><dd>${nhood}</dd>
+      </dl>
+      ${demographicsHtml}
+    </div>
+  `;
+}
+
+const demographicsLayer = L.layerGroup();
+
+const zipLayer = L.geoJSON(zipPolygons, {
+  style: styleZip,
+  onEachFeature: (feature, layer) => {
+    const d = riskLookup[feature.properties.zip];
+    if (d) {
+      layer.bindPopup(popupHtml(d), { maxWidth: 320 });
+      layer.bindTooltip(feature.properties.zip, { sticky: true, direction:'center', className:'zip-tip' });
+      layer.on('mouseover', () => layer.setStyle({ weight: 3, fillOpacity: 0.68 }));
+      layer.on('mouseout', () => zipLayer.resetStyle(layer));
+    }
+  }
+}).addTo(map);
+
+function refreshZipPopups() {
+  zipLayer.eachLayer(layer => {
+    const feature = layer.feature || {};
+    const d = riskLookup[feature.properties && feature.properties.zip];
+    if (d) {
+      layer.bindPopup(popupHtml(d), { maxWidth: 360 });
+    }
+  });
+}
+
+const pointStyleLookup = {
+  ACTIVE: '#dc2626',
+  COMPLIED: '#f59e0b',
+  CLOSED: '#475569'
+};
+
+function makePointLayer(status) {
+  return L.layerGroup(
+    samplePoints
+      .filter(pt => pt.status === status)
+      .map(pt => L.circleMarker([pt.lat, pt.lon], {
+        radius: 5.5,
+        color: '#ffffff',
+        weight: 1.2,
+        fillColor: pointStyleLookup[status] || '#64748b',
+        fillOpacity: 0.95
+      }).bindTooltip(`${pt.address}<br>ZIP ${pt.zip} · ${pt.status}`, {
+        direction: 'top',
+        offset: [0, -2],
+        opacity: 0.96
+      }))
+  );
+}
+
+const activePointsLayer = makePointLayer('ACTIVE').addTo(map);
+const compliedPointsLayer = makePointLayer('COMPLIED').addTo(map);
+const closedPointsLayer = makePointLayer('CLOSED').addTo(map);
+
+map.on('overlayadd', refreshZipPopups);
+map.on('overlayremove', refreshZipPopups);
+
+
+const layersControl = L.control.layers(
+  {},
+  {
+    'ZIP concern polygons': zipLayer,
+    'Point Status — Active': activePointsLayer,
+    'Point Status — Complied': compliedPointsLayer,
+    'Point Status — Closed': closedPointsLayer,
+    'Demographics by ZIP': demographicsLayer
+  },
+  { collapsed:false, position:'topright' }
+).addTo(map);
+
+const layersEl = layersControl.getContainer();
+layersEl.style.position = 'absolute';
+layersEl.style.top = '18px';
+layersEl.style.right = '18px';
+layersEl.style.left = 'auto';
+const dragHandle = document.createElement('div');
+dragHandle.className = 'layers-drag-handle';
+dragHandle.innerHTML = '<span>Move layer box</span><span class="hint">drag here</span>';
+layersEl.insertBefore(dragHandle, layersEl.firstChild);
+const resizeNote = document.createElement('div');
+resizeNote.className = 'layers-resize-note';
+resizeNote.textContent = 'Resize from the lower-right corner.';
+layersEl.appendChild(resizeNote);
+
+(function makeControlDraggable(el, handle) {
+  const mapwrap = document.getElementById('mapwrap');
+  let startX = 0, startY = 0, startRight = 18, startTop = 18, dragging = false;
+  const onMove = (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const maxRight = Math.max(0, mapwrap.clientWidth - el.offsetWidth);
+    const maxTop = Math.max(0, mapwrap.clientHeight - el.offsetHeight);
+    const newRight = Math.min(maxRight, Math.max(0, startRight - dx));
+    const newTop = Math.min(maxTop, Math.max(0, startTop + dy));
+    el.style.right = newRight + 'px';
+    el.style.top = newTop + 'px';
+  };
+  const onUp = () => {
+    dragging = false;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+  };
+  handle.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startRight = parseFloat(el.style.right || getComputedStyle(el).right) || 18;
+    startTop = parseFloat(el.style.top || getComputedStyle(el).top) || 18;
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    e.preventDefault();
+    e.stopPropagation();
+  });
+})(layersEl, dragHandle);
+
+const legendEl = document.getElementById('mapLegend');
+const splitter = document.getElementById('splitter');
+const aside = document.querySelector('aside');
+(function makeAsideResizable() {
+  let startX = 0, startWidth = 370, dragging = false;
+  const onMove = (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const width = Math.min(700, Math.max(240, startWidth + dx));
+    aside.style.width = width + 'px';
+    map.invalidateSize();
+  };
+  const onUp = () => {
+    dragging = false;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+  };
+  splitter.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startWidth = aside.offsetWidth;
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    e.preventDefault();
+  });
+})();
+(function makeLegendDraggable(el) {
+  let startX = 0, startY = 0, startRight = 18, startTop = 18, dragging = false;
+  const mapwrap = document.getElementById('mapwrap');
+  const onMove = (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const maxRight = Math.max(0, mapwrap.clientWidth - el.offsetWidth);
+    const maxTop = Math.max(0, mapwrap.clientHeight - el.offsetHeight);
+    const newRight = Math.min(maxRight, Math.max(0, startRight - dx));
+    const newTop = Math.min(maxTop, Math.max(0, startTop + dy));
+    el.style.right = newRight + 'px';
+    el.style.top = newTop + 'px';
+    el.style.bottom = 'auto';
+  };
+  const onUp = () => {
+    dragging = false;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+  };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.legend-row, h4, .legend-note, .legend-group, .fill-box, .point-dot')) {
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startRight = parseFloat(getComputedStyle(el).right) || 18;
+      startTop = parseFloat(getComputedStyle(el).top) || 18;
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      e.preventDefault();
+    }
+  });
+})(legendEl);
+
+map.fitBounds(zipLayer.getBounds(), { padding:[20,20] });
+</script>
+</body>
+</html>
